@@ -19,6 +19,8 @@
 
 import copy
 
+from keystoneauth1 import plugin
+from keystoneauth1.access import service_catalog as ksa_service_catalog
 from oslo_config import cfg
 from oslo_context import context
 from oslo_log import log as logging
@@ -41,6 +43,30 @@ CONF = cfg.CONF
 CONF.register_opts(context_opts)
 
 LOG = logging.getLogger(__name__)
+
+class _ContextAuthPlugin(plugin.BaseAuthPlugin):
+    """A keystoneauth auth plugin that uses the values from the Context.
+
+    Ideally we would use the plugin provided by auth_token middleware however
+    this plugin isn't serialized yet so we construct one from the serialized
+    auth data.
+    """
+
+    def __init__(self, auth_token, sc):
+        super(_ContextAuthPlugin, self).__init__()
+
+        self.auth_token = auth_token
+        self.service_catalog = ksa_service_catalog.ServiceCatalogV2(sc)
+
+    def get_token(self, *args, **kwargs):
+        return self.auth_token
+
+    def get_endpoint(self, session, service_type=None, interface=None,
+                     region_name=None, service_name=None, **kwargs):
+        return self.service_catalog.url_for(service_type=service_type,
+                                            service_name=service_name,
+                                            interface=interface,
+                                            region_name=region_name)
 
 
 class RequestContext(context.RequestContext):
@@ -154,6 +180,10 @@ class RequestContext(context.RequestContext):
 
     def deepcopy(self):
         return copy.deepcopy(self)
+
+    def get_auth_plugin(self):
+        return _ContextAuthPlugin(self.auth_token, self.service_catalog)
+
 
     # NOTE(sirp): the openstack/common version of RequestContext uses
     # tenant/user whereas the Cinder version uses project_id/user_id.

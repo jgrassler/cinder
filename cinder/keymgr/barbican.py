@@ -101,10 +101,7 @@ class BarbicanKeyManager(key_mgr.KeyManager):
             return self._barbican_client
 
         try:
-            auth = identity.v3.Token(
-                auth_url=CONF.keymgr.encryption_auth_url,
-                token=ctxt.auth_token,
-                project_id=ctxt.project_id)
+            auth = ctxt.get_auth_plugin()
             sess = session.Session(auth=auth)
             self._barbican_client = barbican_client.Client(
                 session=sess,
